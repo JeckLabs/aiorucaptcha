@@ -76,7 +76,7 @@ class Client:
             else:
                 raise self._error(result)
 
-    def _error(self, response):
+    def _error(self, result):
         if result == 'ERROR_WRONG_USER_KEY':
             return WrongUserKeyError()
         elif result == 'ERROR_KEY_DOES_NOT_EXIST':
