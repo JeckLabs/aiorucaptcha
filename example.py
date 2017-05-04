@@ -5,7 +5,8 @@ async def recognize(ocr, filename):
     with open(filename, 'rb') as f:
         captcha = f.read()
         result = await ocr.recognize(captcha)
-        print(result)
+        print(result.code)
+        print(result.task_id)
 
 # Вместо xxx ключ RuCaptcha
 ocr = aiorucaptcha.Client('xxx')
