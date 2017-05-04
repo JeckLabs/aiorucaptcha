@@ -5,6 +5,7 @@ import urllib
 import time
 
 from .errors import *
+from .result import ResultObject
 
 __all__ = ('Client', )
 
@@ -37,11 +38,14 @@ class Client:
                 result = await self._result(client, task_id)
 
                 if result:
-                    return result
+                    return ResultObject(result, task_id)
 
                 if time.time() - start > self._timeout:
                     raise TimeoutError()
 
+    async def complain(self, task_id):
+        with aiohttp.ClientSession() as client:
+            return await self._result(client, task_id, 'reportbad') == 'REPORT_RECORDED'
 
     async def _start(self, client, payload):
         payload = urllib.parse.urlencode(payload)
@@ -54,10 +58,10 @@ class Client:
 
             return result[3:]
 
-    async def _result(self, client, task_id):
+    async def _result(self, client, task_id, action='get'):
         payload = {
             'key': self._key,
-            'action': 'get',
+            'action': action,
             'id': task_id
         }
         payload = urllib.parse.urlencode(payload)
