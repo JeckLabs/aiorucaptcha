@@ -21,95 +21,90 @@ class Client:
 
 
     async def recognize(self, captcha, **kwargs):
-
         payload = kwargs
-
-        payload['key'] = self._key
         payload['method'] = 'base64'
         payload['body'] = base64.b64encode(captcha)
-
         with aiohttp.ClientSession() as client:
             task_id = await self._start(client, payload)
-
+            payload = {'id':task_id, 'action':'get'}
             start = time.time()
             while True:
                 await asyncio.sleep(self._step)
-
-                result = await self._result(client, task_id)
-
-                if result:
-                    return ResultObject(result, task_id)
-
+                result = await self._result(client, payload)
+                if result.find('OK') == 0:
+                    return ResultObject(result[3:], task_id)
                 if time.time() - start > self._timeout:
                     raise TimeoutError()
+                if result == 'CAPCHA_NOT_READY':
+                    continue
+                raise GeneralApiError(result)
 
     async def complain(self, task_id):
         with aiohttp.ClientSession() as client:
-            return await self._result(client, task_id, 'reportbad') == 'REPORT_RECORDED'
+            payload = {'id':task_id, 'action':'reportbad'}
+            result = await self._result(client, payload)
+        if result == 'OK_REPORT_RECORDED':
+            return True
+        raise GeneralApiError(result)
+
+    async def get_balance(self):
+        with aiohttp.ClientSession() as client:
+            payload = {'action':'getbalance'}
+            result = await self._result(client, payload)
+        try:
+            return float(result)
+        except ValueError:
+            raise GeneralApiError(result)
 
     async def _start(self, client, payload):
+        payload['key'] = self._key
         payload = urllib.parse.urlencode(payload)
         action = 'http://%s/in.php' % self._host
         async with client.post(action, data=payload) as resp:
             result = await resp.text()
+        if result.find('OK') != 0:
+            raise self._error(result)
+        return result[3:]
 
-            if result.find('OK') != 0:
-                raise self._error(result)
-
-            return result[3:]
-
-    async def _result(self, client, task_id, action='get'):
-        payload = {
-            'key': self._key,
-            'action': action,
-            'id': task_id
-        }
+    async def _result(self, client, payload):
+        payload['key'] = self._key
         payload = urllib.parse.urlencode(payload)
         action = 'http://%s/res.php?%s' % (self._host, payload)
-
         async with client.get(action) as resp:
             if resp.status != 200:
                 raise HttpError('HTTP Code: %d' % resp.status)
-
             result = await resp.text()
+        self._raise_if_error(result)
+        return result
 
-            if result.find('OK') == 0:
-                return result[3:]
-            elif result == 'CAPCHA_NOT_READY':
-                return False
-            else:
-                raise self._error(result)
-
-    def _error(self, result):
+    def _raise_if_error(self, result):
         if result == 'ERROR_WRONG_USER_KEY':
-            return WrongUserKeyError()
+            raise  WrongUserKeyError()
         elif result == 'ERROR_KEY_DOES_NOT_EXIST':
-            return KeyDoesNotExistError()
+            raise KeyDoesNotExistError()
         elif result == 'ERROR_ZERO_BALANCE':
-            return ZeroBalanceError()
+            raise ZeroBalanceError()
         elif result == 'ERROR_NO_SLOT_AVAILABLE':
-            return NoSlotAvailableError()
+            raise NoSlotAvailableError()
         elif result == 'ERROR_ZERO_CAPTCHA_FILESIZE':
-            return ZeroCaptchaFilesizeError()
+            raise ZeroCaptchaFilesizeError()
         elif result == 'ERROR_TOO_BIG_CAPTCHA_FILESIZE':
-            return TooBigCaptchaFilesizeError()
+            raise TooBigCaptchaFilesizeError()
         elif result == 'ERROR_WRONG_FILE_EXTENSION':
-            return WrongFileExtensionError()
+            raise WrongFileExtensionError()
         elif result == 'ERROR_IMAGE_TYPE_NOT_SUPPORTED':
-            return ImageTypeNotSupportedError()
+            raise ImageTypeNotSupportedError()
         elif result == 'ERROR_IP_NOT_ALLOWED':
-            return IpNotAllowedError()
+            raise IpNotAllowedError()
         elif result == 'IP_BANNED':
-            return IpBannedError()
+            raise IpBannedError()
         elif result == 'ERROR_WRONG_ID_FORMAT':
-            return WrongIdFormatError()
+            raise WrongIdFormatError()
         elif result == 'ERROR_CAPTCHA_UNSOLVABLE':
-            return CaptchaUnsolvableError()
+            raise CaptchaUnsolvableError()
         elif result == 'ERROR_WRONG_CAPTCHA_ID':
-            return WrongCaptchaIdError()
+            raise WrongCaptchaIdError()
         elif result == 'ERROR_BAD_DUPLICATES':
-            return BadDuplicatesError()
+            raise BadDuplicatesError()
         elif result == 'REPORT_NOT_RECORDED':
-            return ReportNotRecordedError()
-        else:
-            return GeneralApiError(result)
+            raise ReportNotRecordedError()
