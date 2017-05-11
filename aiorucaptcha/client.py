@@ -19,11 +19,23 @@ class Client:
         self._timeout = timeout
         self._step = 5
 
-
-    async def recognize(self, captcha, **kwargs):
+    async def recognize_image(self, captcha, **kwargs):
         payload = kwargs
         payload['method'] = 'base64'
         payload['body'] = base64.b64encode(captcha)
+        return await self._recognize(payload)
+
+    # For backward compatibility
+    recognize = recognize_image
+
+    async def recognize_recaptcha(self, googlekey, pageurl, **kwargs):
+        payload = kwargs
+        payload['method'] = 'userrecaptcha'
+        payload['googlekey'] = googlekey
+        payload['pageurl'] = pageurl
+        return await self._recognize(payload)
+
+    async def _recognize(self, payload):
         with aiohttp.ClientSession() as client:
             task_id = await self._start(client, payload)
             payload = {'id':task_id, 'action':'get'}
@@ -63,7 +75,7 @@ class Client:
         async with client.post(action, data=payload) as resp:
             result = await resp.text()
         if result.find('OK') != 0:
-            raise self._error(result)
+            self._raise_if_error(result)
         return result[3:]
 
     async def _result(self, client, payload):
